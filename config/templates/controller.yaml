@@ -53,45 +53,48 @@ spec:
         control-plane: karpenter
     spec:
       priorityClassName: karpenter-high-priority
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                - key: kubernetes.io/os
-                  operator: In
-                  values:
-                    - linux
-                - key: kubernetes.io/arch
-                  operator: In
-                  values:
-                    - amd64
       serviceAccountName: karpenter
       containers:
-      - name: manager
-        image: ko://github.com/awslabs/karpenter/cmd/controller
-        resources:
-          requests:
-            cpu: 1
-            memory: 1Gi
-          limits:
-            cpu: 1
-            memory: 1Gi
-        ports:
-        - name: webhook
-          containerPort: 9443
-          protocol: TCP
-        - name: metrics
-          containerPort: 8080
-        volumeMounts:
-        - mountPath: /tmp/k8s-webhook-server/serving-certs
-          name: cert
-          readOnly: true
+        - name: manager
+          {{- if .Values.controller.repository }}
+          image: {{ .Values.controller.image }}:{{ .Values.controller.tag }}
+          {{- else }}
+          image: {{ .Values.controller.defaultImage }}
+          {{- end }}
+          resources:
+            requests:
+              cpu: 1
+              memory: 1Gi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          ports:
+            - name: webhook
+              containerPort: 9443
+              protocol: TCP
+            - name: metrics
+              containerPort: 8080
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
       # https://github.com/aws/amazon-eks-pod-identity-webhook/issues/8#issuecomment-636888074
       securityContext:
         fsGroup: 1000
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       volumes:
-      - name: cert
-        secret:
-          defaultMode: 420
-          secretName: karpenter-webhook-server-cert
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: karpenter-webhook-server-cert
